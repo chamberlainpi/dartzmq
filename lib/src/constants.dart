@@ -191,6 +191,7 @@ abstract class PlatformConstants {
   int get ECONNRESET;
   int get ETIMEDOUT;
   int get ENOTCONN;
+  int get ENORECV;
 }
 
 /// Linux and Android (Standard Linux Kernel definitions)
@@ -229,6 +230,8 @@ class _LinuxConstants implements PlatformConstants {
   final int ETIMEDOUT = 110;
   @override
   final int ENOTCONN = 107;
+  @override
+  final int ENORECV = -1; // May not be accurate on Linux platform
 }
 
 /// macOS and iOS (BSD/Darwin definitions)
@@ -267,6 +270,8 @@ class _MacOsConstants implements PlatformConstants {
   final int ETIMEDOUT = 60;
   @override
   final int ENOTCONN = 57;
+  @override
+  final int ENORECV = -1; // Only tested not be accurate on macOS platform
 }
 
 /// The Windows definitions
@@ -305,6 +310,8 @@ class _WindowsConstants implements PlatformConstants {
   final int ETIMEDOUT = 10060; // WSAETIMEDOUT
   @override
   final int ENOTCONN = 10057; // WSAENOTCONN
+  @override
+  final int ENORECV = -1; // May not be accurate on Windows platform
 }
 
 /// This variable holds the correct definitions for the current runtime.

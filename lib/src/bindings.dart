@@ -191,6 +191,7 @@ class ZMQBindings {
   bool _loadLibrary(final String name) {
     try {
       library = _dlOpenPlatformSpecific(name);
+      print('Library loaded: $name -- ${library.toString()}');
       return true;
     } catch (err) {
       // log('Failed to load library $name', error: err, name: 'dartzmq');
@@ -199,7 +200,7 @@ class ZMQBindings {
   }
 
   void _initLibrary() {
-    final loaded = _loadLibrary('zmq') ||
+    final loaded = _loadLibrary('libzmq') ||_loadLibrary('zmq') ||
         _loadLibrary('libzmq') ||
         _loadLibrary('libzmq-v142-mt-4_3_5');
     if (!loaded) {
@@ -208,6 +209,7 @@ class ZMQBindings {
   }
 
   void _lookupFunctions() {
+    print('Looking up functions for: ${library}');
     zmq_has = library.lookupFunction<ZmqHasNative, ZmqHasDart>('zmq_has');
     zmq_errno =
         library.lookupFunction<ZmqErrnoNative, ZmqErrnoDart>('zmq_errno');

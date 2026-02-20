@@ -59,14 +59,15 @@ class ZeroMQException implements Exception {
   };
 }
 
-void _checkReturnCode(int code, {List<int> ignore = const []}) {
-  if (code < 0) {
+void _checkReturnCode(int rc, {List<int> ignore = const []}) {
+  if (rc < 0 && !ignore.contains(rc)) {
     _checkErrorCode(ignore: ignore);
   }
 }
 
 void _checkErrorCode({List<int> ignore = const []}) {
   final errorCode = _bindings.zmq_errno();
+    print('dartzmq: _checkErrorCode: $errorCode, ignore: ${ignore.join(', ')}');
   if (!ignore.contains(errorCode)) {
     throw ZeroMQException(errorCode);
   }
