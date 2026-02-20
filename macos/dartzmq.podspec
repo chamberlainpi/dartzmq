@@ -24,6 +24,9 @@ A simple dart zeromq implementation/wrapper around the libzmq C++ library.
   s.swift_version = '5.0'
 
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
-  s.pod_target_xcconfig = { "OTHER_LDFLAGS" => "$(inherited) -force_load $(PODS_TARGET_SRCROOT)/Frameworks/$(ARCHS)/libzmq.a -lstdc++" }
+  s.pod_target_xcconfig = {
+    'OTHER_LDFLAGS[arch=x86_64]' => '$(inherited) -force_load $(PODS_TARGET_SRCROOT)/Frameworks/x86_64/libzmq.a -lstdc++',
+    'OTHER_LDFLAGS[arch=arm64]' => '$(inherited) -force_load $(PODS_TARGET_SRCROOT)/Frameworks/arm64/libzmq.a -lstdc++'
+  }
 
 end
