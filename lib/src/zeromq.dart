@@ -62,6 +62,11 @@ class ZContext {
     return _stopCompleter!.future;
   }
 
+  /// Poll interval for checking incoming ZMQ messages.
+  /// Shorter intervals reduce REQ/REP round-trip latency at the cost of more CPU
+  /// when idle. 50ms is a good balance for interactive command-and-control.
+  static const _pollInterval = Duration(milliseconds: 50);
+
   /// Starts the periodic polling task if it was not started already and
   /// if there are actually listeners on sockets
   void _startPolling() {
@@ -74,49 +79,64 @@ class ZContext {
   void _poll() {
     final socketCount = _listenedSockets.length;
 
+    if (socketCount == 0) return;
+
     final pollerEvents =
         malloc.allocate<ZMQPollerEvent>(sizeOf<ZMQPollerEvent>() * socketCount);
+
     final availableEventCount =
         _bindings.zmq_poller_wait_all(_poller, pollerEvents, socketCount, 0);
 
     if (availableEventCount > 0) {
       final frame = ZMQBindings.allocateMessage();
-      var rc = _bindings.zmq_msg_init(frame); // rc == 0
-      _checkReturnCode(rc);
+      var frameReleased = false;
 
-      for (var eventIdx = 0; eventIdx < availableEventCount; ++eventIdx) {
-        final pollerEvent = pollerEvents[eventIdx];
-        final socket = _listenedSockets[pollerEvent.socket]!;
+      try {
+        var rc = _bindings.zmq_msg_init(frame); // rc == 0
+        _checkReturnCode(rc);
 
-        // Receive multiple message parts
-        ZMessage zMessage = ZMessage();
-        while ((rc =
-                _bindings.zmq_msg_recv(frame, socket._socket, ZMQ_DONTWAIT)) >=
-            0) {
-          // final size = _bindings.zmq_msg_size(msg);
-          final data = _bindings.zmq_msg_data(frame).cast<Uint8>();
-          final copyOfData = Uint8List.fromList(data.asTypedList(rc));
+        for (var eventIdx = 0; eventIdx < availableEventCount; ++eventIdx) {
+          final pollerEvent = pollerEvents[eventIdx];
+          final socket = _listenedSockets[pollerEvent.socket]!;
 
-          final hasMore = _bindings.zmq_msg_more(frame) != 0;
+          // Receive multiple message parts
+          ZMessage zMessage = ZMessage();
+          while (
+              (rc = _bindings.zmq_msg_recv(frame, socket._socket, ZMQ_DONTWAIT)) >= 0) {
+            // final size = _bindings.zmq_msg_size(msg);
+            final data = _bindings.zmq_msg_data(frame).cast<Uint8>();
+            final copyOfData = Uint8List.fromList(data.asTypedList(rc));
 
-          zMessage.add(ZFrame(copyOfData, hasMore: hasMore));
+            final hasMore = _bindings.zmq_msg_more(frame) != 0;
 
-          if (!hasMore) {
-            socket._controller.add(zMessage);
-            zMessage = ZMessage();
+            zMessage.add(ZFrame(copyOfData, hasMore: hasMore));
+
+            if (!hasMore) {
+              socket._controller.add(zMessage);
+              zMessage = ZMessage();
+            }
           }
+
+          _checkReturnCode(rc,
+              ignore: [constants.EAGAIN, constants.EINTR, constants.ENORECV]);
         }
 
-        _checkReturnCode(rc, ignore: [constants.EAGAIN, constants.EINTR]);
+        rc = _bindings.zmq_msg_close(frame); // rc == 0
+        malloc.free(frame);
+        frameReleased = true;
+        _checkReturnCode(rc);
+      } catch (e, st) {
+        print('❌ ZMQ _poll() failed with error: $e\n$st');
+      } finally {
+        if (!frameReleased) {
+          _bindings.zmq_msg_close(frame);
+          malloc.free(frame);
+        }
       }
-
-      rc = _bindings.zmq_msg_close(frame); // rc == 0
-      malloc.free(frame);
-      _checkReturnCode(rc);
     }
 
     malloc.free(pollerEvents);
-
+    
     // Do we need to shutdown?
     if (_shutdown) {
       _shutdownInternal();
