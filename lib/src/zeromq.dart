@@ -44,11 +44,15 @@ class ZContext {
   /// Maps raw zeromq sockets [ZMQSocket] to our wrapper class [ZSocket].
   final Map<ZMQSocket, ZSocket> _listenedSockets = {};
 
+  /// Poll interval for checking incoming ZMQ messages in milliseconds.
+  final Duration pollInterval;
+  
+
   /// Create a new global ZContext
   ///
   /// Note only one context should exist throughout your application
   /// and it should be closed if the app is disposed
-  ZContext() {
+  ZContext({this.pollInterval = const Duration(milliseconds: 1000)}) {
     _context = _bindings.zmq_ctx_new();
     _poller = _bindings.zmq_poller_new();
     _startPolling();
@@ -62,16 +66,11 @@ class ZContext {
     return _stopCompleter!.future;
   }
 
-  /// Poll interval for checking incoming ZMQ messages.
-  /// Shorter intervals reduce REQ/REP round-trip latency at the cost of more CPU
-  /// when idle. 50ms is a good balance for interactive command-and-control.
-  static const _pollInterval = Duration(milliseconds: 50);
-
   /// Starts the periodic polling task if it was not started already and
   /// if there are actually listeners on sockets
   void _startPolling() {
     if (_timer == null && _listenedSockets.isNotEmpty) {
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) => _poll());
+      _timer = Timer.periodic(pollInterval, (timer) => _poll());
     }
   }
 
@@ -79,7 +78,10 @@ class ZContext {
   void _poll() {
     final socketCount = _listenedSockets.length;
 
-    if (socketCount == 0) return;
+    if (socketCount == 0) {
+      _stopPolling();
+      return;
+    }
 
     final pollerEvents =
         malloc.allocate<ZMQPollerEvent>(sizeOf<ZMQPollerEvent>() * socketCount);
@@ -136,15 +138,16 @@ class ZContext {
     }
 
     malloc.free(pollerEvents);
-    
+
     // Do we need to shutdown?
     if (_shutdown) {
       _shutdownInternal();
-    } else if (socketCount > 0) {
-      return;
+    } else if (socketCount == 0) {
+      _stopPolling();
     }
+  }
 
-    // If we land here either there are no
+  void _stopPolling() {
     _timer?.cancel();
     _timer = null;
     _stopCompleter?.complete(null);
